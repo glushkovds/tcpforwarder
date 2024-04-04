@@ -9,26 +9,35 @@ import (
 )
 
 type Forwarder struct {
-	src         Address
-	dst         Address
-	dialTimeout int
+	src            Address
+	dst            Address
+	dialTimeout    int
+	acceptIPFilter string
 }
 
-func NewForwarder(src Address, dst Address, dialTimeout int) *Forwarder {
+func NewForwarder(src Address, dst Address, dialTimeout int, acceptIPFilter string) *Forwarder {
 	return &Forwarder{
-		src:         src,
-		dst:         dst,
-		dialTimeout: dialTimeout,
+		src:            src,
+		dst:            dst,
+		dialTimeout:    dialTimeout,
+		acceptIPFilter: acceptIPFilter,
 	}
 }
 
 func (f *Forwarder) Start() {
 	listener, err := net.Listen("tcp", f.src.String())
 	panicIfErr(err)
+	_, acceptSubnet, _ := net.ParseCIDR(f.acceptIPFilter)
 	for {
 		srcConn, err := listener.Accept()
 		if err != nil {
 			println(err.Error())
+			continue
+		}
+		srcIP, _ := net.ResolveTCPAddr("tcp", srcConn.RemoteAddr().String())
+		if !acceptSubnet.Contains(srcIP.IP) {
+			println(fmt.Sprintf(`%s -- %s restricted`, time.Now().Format(time.RFC3339), srcIP))
+			_ = srcConn.Close()
 			continue
 		}
 		go func(srcConn net.Conn) {

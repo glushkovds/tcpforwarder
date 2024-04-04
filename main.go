@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"net"
 	"os"
 	"strconv"
 	"strings"
@@ -23,6 +24,7 @@ func main() {
 	remoteHost := flag.String("rHost", "8.8.8.8", "remote host")
 	remotePort := flag.Int("rPort", 53, "remote port ( will be equal to lPort when doing range forward )")
 	dialTimeout := flag.Int("timeout", 4, "dial timeout in seconds")
+	acceptIPFilter := flag.String("acceptIPFilter", "0.0.0.0/0", "subnet of IP addresses from which to accept connections only ( 172.0.0.0/8 for example )")
 	help := flag.Bool("help", false, "print help")
 	h := flag.Bool("h", false, "")
 
@@ -38,6 +40,10 @@ find me on telegram: @unsafepointer
 	if *dialTimeout <= 0 || *dialTimeout > 32 {
 		panic("invalid dial timeout, it should be bigger than 0 and smaller than 32")
 	}
+	if _, _, err := net.ParseCIDR(*acceptIPFilter); err != nil {
+		panic("invalid acceptIPFilter format")
+	}
+
 	src := Address{}
 	dst := Address{
 		Host: *remoteHost,
@@ -68,7 +74,7 @@ find me on telegram: @unsafepointer
 			}, Address{
 				Host: *remoteHost,
 				Port: port,
-			}, *dialTimeout)
+			}, *dialTimeout, *acceptIPFilter)
 		}
 	} else {
 		n, err := strconv.Atoi(*listenPort)
@@ -79,12 +85,12 @@ find me on telegram: @unsafepointer
 		src.Host = *listenHost
 		src.Port = n
 		println(fmt.Sprintf(`[I] tcp://%s <-> tcp://%s`+"\n", src.String(), dst.String()))
-		go startForwarder(src, dst, *dialTimeout)
+		go startForwarder(src, dst, *dialTimeout, *acceptIPFilter)
 	}
 	select {}
 }
 
-func startForwarder(src, dst Address, dialTimeout int) {
-	forwarder := NewForwarder(src, dst, dialTimeout)
+func startForwarder(src, dst Address, dialTimeout int, acceptIPFilter string) {
+	forwarder := NewForwarder(src, dst, dialTimeout, acceptIPFilter)
 	forwarder.Start()
 }
